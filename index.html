@@ -1003,8 +1003,9 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   // ---------- 바탕지도 타일 (인터넷 연결 시) ----------
   const BASEMAPS = {
     street: {
-      url: (z, x, y) => `https://${'abcd'[(x + y) % 4]}.basemaps.cartocdn.com/${isDark() ? 'dark_all' : 'rastertiles/voyager'}/${z}/${x}/${y}${dpr > 1 ? '@2x' : ''}.png`,
-      max: 20, attr: '바탕지도 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 기여자 © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+      // OSM 기본 타일: 키 없이 어느 주소에서나 쓸 수 있다. 어두운 화면에선 색을 뒤집어 쓴다.
+      url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+      max: 19, dark: true, attr: '바탕지도 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 기여자',
     },
     sat: {
       url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
@@ -1036,6 +1037,8 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     const x0 = Math.floor((cx - W / 2 / f) / 256), x1 = Math.floor((cx + W / 2 / f) / 256);
     const y0 = Math.max(0, Math.floor((cy - H / 2 / f) / 256)), y1 = Math.min(n - 1, Math.floor((cy + H / 2 / f) / 256));
     const size = 256 * f;
+    ctx.save();
+    if (B.dark && isDark()) ctx.filter = 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85)';
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
       const sx = W / 2 + (tx * 256 - cx) * f, sy = H / 2 + (ty * 256 - cy) * f;
       const t = tile(B.url(z, tx, ty));
@@ -1049,6 +1052,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
         break;
       }
     }
+    ctx.restore();
     return true;
   }
   function renderAttr() {
