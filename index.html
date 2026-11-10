@@ -254,6 +254,18 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         </div>
         <p class="note">켜면 운영시간이 늘어난 것으로 가정하고 공백을 다시 계산합니다. 새로 열리는 쉼터는 보라색 테두리로 표시됩니다.</p>
       </section>
+      <section>
+        <div class="lab">새 쉼터를 연다면 어디에? <small>공백 인구를 가장 많이 줄이는 순</small></div>
+        <div class="toggles">
+          <label style="align-items:center">새로 열 곳 <input type="range" id="rec-n" min="1" max="30" value="10" style="flex:1;margin-top:0" aria-label="새로 열 쉼터 수"><b id="rec-n-v" style="min-width:3em;text-align:right">10곳</b></label>
+          <label><input type="radio" name="rec-who" value="all" checked>생활인구 전체 기준</label>
+          <label><input type="radio" name="rec-who" value="old">65세 이상 기준 (폭염 취약)</label>
+          <label><input type="checkbox" id="lay-rec" checked>지도에 추천 위치 보기 (보라색 번호와 500m 원)</label>
+        </div>
+        <div class="card" id="rec-sum" style="margin-top:8px"></div>
+        <div class="list" id="rec-list" style="margin-top:6px"></div>
+        <p class="note">250m 칸마다 그 자리에 쉼터를 하나 연다고 가정하고, 아직 500m 안에 열린 쉼터가 없는 사람을 가장 많이 덮는 곳부터 하나씩 고릅니다. 앞서 고른 곳이 이미 덮은 사람은 다시 세지 않습니다. 동 안의 인구는 고르게 퍼져 있다고 가정했고, 위의 시각·요일·대상·운영시간 가정을 그대로 따릅니다. 위치를 누르면 그 자리의 건물과 주변 시설이 떠서, 실제로 열 만한 건물(주민센터, 도서관, 경로당 등)을 찾아볼 수 있습니다.</p>
+      </section>
     </div>
 
     <p class="note">자료: 서울 열린데이터광장 OA-21065 서울시 무더위쉼터(2026.10.16 갱신), OA-14991 생활인구(2026.7), 수도권 생활이동(2026.7, 목적 3 귀가), OA-15969 S-DoT 환경정보(2026.6.29~8.16), OA-21695 안심귀갓길, 공공데이터포털 15138456 행정안전부 무더위쉼터(샘플), 행정동 경계 vuski/admdongkor. ‘누구나’는 시설구분이 특정계층이용시설이 아닌 곳입니다. 공백 인구는 같은 요일·시각의 2026년 7월 평균 생활인구를 행정동 안 공백 칸 비율로 나눈 추정치입니다. 운영시간은 공개 자료 기준이니 방문 전에 전화로 확인하세요. 거리는 직선거리입니다.</p>
@@ -477,6 +489,65 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       routeStat = { km: all / 1000, pct: ok / all * 100 };
     }
   }
+  // ---------- 새 쉼터 입지 추천 (탐욕적 최대 커버리지) ----------
+  const rec = { n: 10, who: 'all', show: true, list: [], before: 0, after: 0 };
+  function computeRec() {
+    const dt = dtype(), h = Math.floor(st.t / 60);
+    const cells = cov.gapCells, m = cells.length;
+    const w = new Float64Array(m), idx = new Map();
+    let total = 0;
+    cells.forEach(([la, lo, di], c) => {
+      const d = DONGS[di], p = rec.who === 'old' ? d.p65[dt][h] : d.p[dt][h];
+      w[c] = cov.dn[di] ? p / cov.dn[di] : 0; total += w[c];
+      idx.set(Math.round(la / D.dlat) + ',' + Math.round(lo / D.dlon), c);
+    });
+    const nb = cells.map(([la, lo]) => {
+      const i0 = Math.round(la / D.dlat), j0 = Math.round(lo / D.dlon), out = [];
+      for (let a = -3; a <= 3; a++) for (let b = -3; b <= 3; b++) {
+        const c = idx.get((i0 + a) + ',' + (j0 + b));
+        if (c == null) continue;
+        const dy = (cells[c][0] - la) * MLAT, dx = (cells[c][1] - lo) * MLON;
+        if (dx * dx + dy * dy <= R * R) out.push(c);
+      }
+      return out;
+    });
+    const done = new Uint8Array(m), list = [];
+    let got = 0;
+    for (let t = 0; t < rec.n; t++) {
+      let best = -1, bv = 0;
+      for (let c = 0; c < m; c++) {
+        if (done[c]) continue;
+        let v = 0;
+        for (const x of nb[c]) if (!done[x]) v += w[x];
+        if (v > bv) { bv = v; best = c; }
+      }
+      if (best < 0 || bv < 1) break;
+      for (const x of nb[best]) done[x] = 1;
+      const [la, lo, di] = cells[best];
+      list.push({ lat: la, lon: lo, di, gain: bv });
+      got += bv;
+    }
+    rec.list = list; rec.before = total; rec.after = total - got;
+  }
+  function renderRec() {
+    $('rec-n-v').textContent = rec.n + '곳';
+    const who = rec.who === 'old' ? '65세 이상' : '생활인구';
+    const when = `${DAYS[st.day]}요일 ${hhmm(st.t)}`;
+    if (!rec.list.length) {
+      $('rec-sum').innerHTML = `<span class="note">${when}에는 공백 인구가 거의 없어 추천할 곳이 없습니다.</span>`;
+      $('rec-list').innerHTML = ''; return;
+    }
+    const cut = rec.before - rec.after;
+    $('rec-sum').innerHTML = `<div style="font-size:13px">${when} 기준 공백 ${who} <b>${fmtPeople(rec.before)}명</b> → ${rec.list.length}곳을 새로 열면 <b>${fmtPeople(rec.after)}명</b></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmtPeople(cut)}명(${(cut / rec.before * 100).toFixed(1)}%)이 걸어서 7분 안에 쉼터를 갖게 됩니다.</div>`;
+    const open = view.filter((v) => v.left >= 0);
+    $('rec-list').innerHTML = rec.list.map((r, j) => {
+      let nd = Infinity;
+      for (const v of open) nd = Math.min(nd, mDist(r.lat, r.lon, v.s.lat, v.s.lon));
+      const nds = nd === Infinity ? '없음' : nd < 1000 ? Math.round(nd) + 'm' : (nd / 1000).toFixed(1) + 'km';
+      return `<button type="button" class="row" data-r="${j}"><span class="nm"><b style="color:var(--plan)">${j + 1}</b> ${esc(dongName(r.di))}</span><span class="d">+${fmtPeople(r.gain)}명</span><span class="meta">지금 가장 가까운 열린 쉼터 ${nds}</span></button>`;
+    }).join('');
+  }
   function coverage(bucket, keepCells) {
     const dn = new Array(DONGS.length).fill(0), dc = new Array(DONGS.length).fill(0);
     const gap = [];
@@ -622,6 +693,22 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       }
     }
     drawHot();
+    // 새 쉼터 추천 위치 (정책 화면에서만)
+    if (st.tab === 'policy' && rec.show && rec.list.length) {
+      const cP = css('--plan'), rr = R / MLAT * cam.k;
+      ctx.setLineDash([4, 4]); ctx.lineWidth = 1.2; ctx.strokeStyle = cP;
+      ctx.fillStyle = cP;
+      for (const r of rec.list) { const [x, y] = px(r.lat, r.lon); ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.283); ctx.globalAlpha = 0.12; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke(); }
+      ctx.setLineDash([]);
+      ctx.font = `700 11px ${css('--f-num') || css('--f-body')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      rec.list.forEach((r, j) => {
+        const [x, y] = px(r.lat, r.lon);
+        ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.283); ctx.fillStyle = cP; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.fillText(String(j + 1), x, y + 0.5);
+      });
+      ctx.textBaseline = 'alphabetic';
+    }
     // 보건소·병원 쉼터 강조
     if (st.health) {
       ctx.strokeStyle = css('--ink'); ctx.lineWidth = 1.6;
@@ -751,6 +838,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     if (st.gap) h += `<div><i style="background:${LAYERS[st.base] ? (isDark() ? 'rgba(0,0,0,.45)' : 'rgba(21,38,43,.30)') : 'var(--gap-fill)'};border-radius:2px"></i>${LAYERS[st.base] ? '어두운 칸' : '공백 칸'}(500m 안에 열린 쉼터 없음)</div>`;
     if (st.hot && HOT.length) h += `<div><b style="display:inline-block;width:10px;margin-right:6px;color:${CCOL[3]}">◆</b>주요 장소 혼잡도(${esc(CITY.t)})</div>`;
     if (st.health) h += '<div><b style="display:inline-block;width:10px;margin-right:6px;text-align:center">+</b>보건소·병원 쉼터</div>';
+    if (st.tab === 'policy' && rec.show && rec.list.length) h += '<div><i style="background:var(--plan)"></i>새 쉼터 추천 위치(번호 = 우선순위)</div>';
     if (st.route && routeStat) h += `<div><span class="ln" style="background:var(--route-ok)"></span>안심귀갓길: 500m 안 열린 쉼터 있음 ${routeStat.pct.toFixed(0)}%</div><div><span class="ln" style="background:var(--route-no)"></span>안심귀갓길: 없음 (전체 ${routeStat.km.toFixed(0)}km)</div>`;
     const L = LAYERS[st.base];
     if (L) {
@@ -901,7 +989,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
 
   // ---------- 갱신 ----------
   let raf = 0;
-  function update() { compute(); renderPanel(); draw(); }
+  function update() { compute(); computeRec(); renderPanel(); renderRec(); draw(); }
   function redraw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); }); }
 
   // ---------- 입력 ----------
@@ -923,8 +1011,18 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   $('plan-eve').addEventListener('change', (e) => { st.plan.eve = e.target.checked; update(); });
   $('plan-wkd').addEventListener('change', (e) => { st.plan.wkd = e.target.checked; update(); });
   $('near').addEventListener('click', (e) => { const b = e.target.closest('[data-i]'); if (b) { const i = +b.dataset.i; select(i, true); openPlace({ lat: S[i].lat, lon: S[i].lon, shelter: S[i] }); draw(); } });
+  $('rec-n').addEventListener('input', (e) => { rec.n = +e.target.value; computeRec(); renderRec(); renderLegend(); draw(); });
+  document.querySelectorAll('input[name=rec-who]').forEach((el) => el.addEventListener('change', (e) => { rec.who = e.target.value; computeRec(); renderRec(); draw(); }));
+  $('lay-rec').addEventListener('change', (e) => { rec.show = e.target.checked; renderLegend(); draw(); });
+  $('rec-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-r]'); if (!b) return;
+    const r = rec.list[+b.dataset.r];
+    cam.lat = r.lat; cam.lon = r.lon; cam.k = Math.max(cam.k, home.k * 10);
+    openPlace({ lat: r.lat, lon: r.lon }); draw();
+  });
   function tab(which) {
     const u = which === 'user';
+    st.tab = which; renderLegend(); redraw();
     $('tab-user').setAttribute('aria-selected', u); $('tab-policy').setAttribute('aria-selected', !u);
     $('pane-user').hidden = !u; $('pane-policy').hidden = u;
     $('pane-user').style.display = u ? 'flex' : ''; $('pane-policy').style.display = u ? '' : 'flex';
@@ -1332,6 +1430,6 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChange); } catch (e) {}
   new MutationObserver(themeChange).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   setBasemap(st.basemap);
-  compute(); renderPanel(); resize();
+  compute(); computeRec(); renderPanel(); renderRec(); resize();
 })();
 </script>
