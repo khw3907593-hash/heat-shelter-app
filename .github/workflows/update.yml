@@ -28,6 +28,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: 서울시 API 불러오기
+        continue-on-error: true
         env:
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
         run: python update.py
