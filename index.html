@@ -174,7 +174,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <section aria-labelledby="l-who">
       <div class="lab" id="l-who">나는 누구인가요 <small>여러 개 선택 가능</small></div>
       <div class="chips" id="who-chips"></div>
-      <div class="toggles"><label><input type="checkbox" id="p-health">건강이 걱정돼요: 보건소·병원 쉼터를 + 표시로 강조</label></div>
+      <div class="toggles"><label><input type="checkbox" id="p-health">건강이 걱정돼요: 보건소·병원 쉼터를 고리로 강조</label></div>
     </section>
 
     <section aria-labelledby="l-when">
@@ -209,7 +209,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       </section>
       <section>
         <div class="lab">지금 붐비는 곳 <small id="hot-time"></small></div>
-        <div class="toggles"><label><input type="checkbox" id="lay-hot" checked>지도에 주요 장소 혼잡도 보기 (◆ 초록 여유 · 노랑 보통 · 주황 약간 붐빔 · 빨강 붐빔)</label></div>
+        <div class="toggles"><label><input type="checkbox" id="lay-hot" checked>지도에 주요 장소 혼잡도 보기 (막대가 찰수록 붐빔: 초록 여유 · 노랑 보통 · 주황 약간 붐빔 · 빨강 붐빔)</label></div>
         <div class="list" id="hotlist"></div>
         <p class="note">붐비는 정도가 큰 순서, 같은 정도면 500m 안 열린 쉼터가 적은 순서입니다. 누르면 오늘 저녁까지의 혼잡도 예측이 나옵니다.</p>
       </section>
@@ -665,9 +665,10 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     // 쉼터 점
     const rad = Math.max(2, Math.min(6, cam.k / home.k * 2.2));
     const cOpen = css('--accent'), cSoon = css('--soon'), cClosed = css('--closed'), cPlan = css('--plan');
+    const arm = rad * 1.15 + 0.8, thick = Math.max(1.8, arm * 0.62);
     if (st.showClosed) {
       ctx.fillStyle = cClosed; ctx.globalAlpha = 0.55;
-      for (const v of view) if (v.left < 0) { const [x, y] = px(v.s.lat, v.s.lon); ctx.beginPath(); ctx.arc(x, y, rad * 0.8, 0, 6.283); ctx.fill(); }
+      for (const v of view) if (v.left < 0) { const [x, y] = px(v.s.lat, v.s.lon); crossPath(x, y, arm * 0.8, thick * 0.8); ctx.fill(); }
       ctx.globalAlpha = 1;
     }
     ctx.strokeStyle = css('--panel'); ctx.lineWidth = 1;
@@ -675,10 +676,12 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       if (v.left < 0) continue;
       const [x, y] = px(v.s.lat, v.s.lon);
       if (x < -10 || y < -10 || x > W + 10 || y > H + 10) continue;
-      ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.283);
+      crossPath(x, y, arm, thick);
+      ctx.lineJoin = 'round';
+      if (L || tiled || rad > 3) { ctx.strokeStyle = tiled ? '#fff' : css('--panel'); ctx.lineWidth = tiled ? 2 : 1.2; ctx.stroke(); }
       ctx.fillStyle = v.left < 60 ? cSoon : cOpen; ctx.fill();
-      if (L || tiled) { ctx.strokeStyle = '#fff'; ctx.lineWidth = tiled ? 1.5 : 1; ctx.stroke(); }
-      if (v.plan) { ctx.strokeStyle = cPlan; ctx.lineWidth = 2; ctx.stroke(); }
+      if (v.plan) { ctx.strokeStyle = cPlan; ctx.lineWidth = 1.8; ctx.stroke(); }
+      ctx.lineJoin = 'miter';
     }
     // 건물이 보이는 배율에서는 열린 쉼터 이름을 함께 쓴다
     if (cam.k > home.k * 22) {
@@ -689,7 +692,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
         if (v.left < 0 || nlab > 150) continue;
         const [x, y] = px(v.s.lat, v.s.lon);
         if (x < -50 || y < -10 || x > W + 10 || y > H + 10) continue;
-        ctx.strokeText(v.s.name, x + rad + 4, y + 4); ctx.fillText(v.s.name, x + rad + 4, y + 4); nlab++;
+        ctx.strokeText(v.s.name, x + arm + 4, y + 4); ctx.fillText(v.s.name, x + arm + 4, y + 4); nlab++;
       }
     }
     drawHot();
@@ -714,14 +717,14 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       ctx.strokeStyle = css('--ink'); ctx.lineWidth = 1.6;
       for (const v of view) {
         if (!v.s.health || (v.left < 0 && !st.showClosed)) continue;
-        const [x, y] = px(v.s.lat, v.s.lon); const h = rad + 4;
-        ctx.beginPath(); ctx.moveTo(x - h, y); ctx.lineTo(x + h, y); ctx.moveTo(x, y - h); ctx.lineTo(x, y + h); ctx.stroke();
+        const [x, y] = px(v.s.lat, v.s.lon);
+        ctx.beginPath(); ctx.arc(x, y, arm + 3.5, 0, 6.283); ctx.stroke();
       }
     }
     // 선택
     if (st.sel != null) {
       const s = S[st.sel]; const [x, y] = px(s.lat, s.lon);
-      ctx.beginPath(); ctx.arc(x, y, rad + 5, 0, 6.283); ctx.strokeStyle = css('--ink'); ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, arm + 6, 0, 6.283); ctx.strokeStyle = css('--ink'); ctx.lineWidth = 2; ctx.stroke();
     }
     // 장소 카드로 연 지점(쉼터가 아닐 때)
     if (PL.cur && !PL.cur.shelter && !PL.cur.hot && !$('place').hidden) {
@@ -766,30 +769,59 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   const HOT = CITY ? CITY.p.map(([name, lat, lon, lv, a, b, f, temp, hum], i) => ({ i, name, lat, lon, lv, a, b, f, temp, hum })) : [];
   st.hot = !!CITY;
   function openNear(h, r = R) { return view.filter((v) => v.left >= 0 && mDist(h.lat, h.lon, v.s.lat, v.s.lon) <= r).length; }
+  // 쉼터 = 끝이 둥근 십자, 혼잡도 = 차오르는 막대
+  function crossPath(x, y, a, t) {
+    const h = t / 2;
+    ctx.beginPath();
+    ctx.moveTo(x - h, y - a); ctx.lineTo(x + h, y - a); ctx.lineTo(x + h, y - h); ctx.lineTo(x + a, y - h);
+    ctx.lineTo(x + a, y + h); ctx.lineTo(x + h, y + h); ctx.lineTo(x + h, y + a); ctx.lineTo(x - h, y + a);
+    ctx.lineTo(x - h, y + h); ctx.lineTo(x - a, y + h); ctx.lineTo(x - a, y - h); ctx.lineTo(x - h, y - h);
+    ctx.closePath();
+  }
+  function rrect(x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  const hotSize = (h) => {
+    const z = cam.k / home.k;
+    const s = Math.max(5, Math.min(11, 3 + Math.sqrt(h.b) / 45)) * Math.min(1.5, Math.max(0.85, z / 2));
+    return { w: Math.round(s * 2.6), h: Math.max(6, Math.round(s * 1.15)) };
+  };
+  const crossSvg = (c) => `<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-1px;margin-right:6px"><path d="M4.4 1h3.2v3.4H11v3.2H7.6V11H4.4V7.6H1V4.4h3.4z" fill="${c}" stroke="var(--panel)" stroke-width="1" stroke-linejoin="round"/></svg>`;
+  const battSvg = (lv, w = 22) => `<svg width="${w}" height="10" viewBox="0 0 22 10" style="vertical-align:-1px"><rect x=".75" y=".75" width="20.5" height="8.5" rx="2.6" fill="none" stroke="${CCOL[lv]}" stroke-width="1.5"/><rect x="2.5" y="2.5" width="${(17 * (lv + 1) / 4).toFixed(2)}" height="5" rx="1.2" fill="${CCOL[lv]}"/></svg>`;
   function drawHot() {
     if (!st.hot || !HOT.length) return;
     const z = cam.k / home.k;
     for (const h of HOT) {
       const [x, y] = px(h.lat, h.lon);
       if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
-      const s = Math.max(5, Math.min(13, 3 + Math.sqrt(h.b) / 40)) * Math.min(1.6, Math.max(0.8, z / 2));
-      ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s, y); ctx.closePath();
-      ctx.fillStyle = CCOL[h.lv]; ctx.globalAlpha = 0.9; ctx.fill(); ctx.globalAlpha = 1;
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+      const { w, h: bh } = hotSize(h), x0 = x - w / 2, y0 = y - bh / 2, r = bh / 2.6;
+      // 바깥 테두리(흰 테 + 바탕) → 레벨 색 외곽선 → 안쪽 채움
+      rrect(x0, y0, w, bh, r);
+      ctx.fillStyle = css('--panel'); ctx.globalAlpha = 0.92; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.lineWidth = 3.2; ctx.strokeStyle = isDark() ? css('--panel') : 'rgba(255,255,255,.85)'; ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = CCOL[h.lv]; ctx.stroke();
+      const pad = Math.max(1.6, bh * 0.2), iw = (w - pad * 2) * (h.lv + 1) / 4;
+      rrect(x0 + pad, y0 + pad, iw, bh - pad * 2, Math.max(0.8, r - pad));
+      ctx.fillStyle = CCOL[h.lv]; ctx.fill();
       if (z > 3 || (h.lv >= 2 && z > 1.6)) {
         ctx.font = `700 11.5px ${css('--f-body')}`; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
-        ctx.strokeStyle = css('--panel'); ctx.lineWidth = 3; ctx.strokeText(h.name, x + s + 3, y + 4);
-        ctx.fillStyle = css('--ink'); ctx.fillText(h.name, x + s + 3, y + 4);
+        ctx.strokeStyle = css('--panel'); ctx.lineWidth = 3; ctx.strokeText(h.name, x + w / 2 + 4, y + 4);
+        ctx.fillStyle = css('--ink'); ctx.fillText(h.name, x + w / 2 + 4, y + 4);
       }
     }
   }
   function hotAt(x, y) {
     if (!st.hot) return null;
-    let best = null, bd = 14 * 14;
-    for (const h of HOT) { const [hx, hy] = px(h.lat, h.lon); const d = (hx - x) ** 2 + (hy - y) ** 2; if (d < bd) { bd = d; best = h; } }
+    let best = null, bd = Infinity;
+    for (const h of HOT) {
+      const [hx, hy] = px(h.lat, h.lon), sz = hotSize(h);
+      if (Math.abs(hx - x) > sz.w / 2 + 5 || Math.abs(hy - y) > sz.h / 2 + 6) continue;
+      const d = (hx - x) ** 2 + (hy - y) ** 2; if (d < bd) { bd = d; best = h; }
+    }
     return best;
   }
-  const cpill = (lv) => `<span class="pill" style="background:color-mix(in srgb,${CCOL[lv]} 18%,transparent);color:${CCOL[lv]}">${CLV[lv]}</span>`;
+  const cpill = (lv) => `<span class="pill" style="background:color-mix(in srgb,${CCOL[lv]} 14%,transparent);color:${CCOL[lv]}">${battSvg(lv, 18)} ${CLV[lv]}</span>`;
   function hotForecast(h) {
     const cells = [...h.f].map((c, j) => { const hr = (CITY.f0 + j) % 24; return `<div title="${hr}시 ${CLV[+c]}"><i style="background:${CCOL[+c]}"></i><small>${j % 3 === 0 ? hr : ''}</small></div>`; }).join('');
     return `<div class="fc">${cells}</div>`;
@@ -832,12 +864,12 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   }
 
   function renderLegend() {
-    let h = `<div><i style="background:var(--accent)"></i>열림</div>
-      <div><i style="background:var(--soon)"></i>1시간 안에 닫힘</div>`;
-    if (st.plan.eve || st.plan.wkd) h += '<div><i style="background:transparent;border:2px solid var(--plan);width:8px;height:8px"></i>운영시간 가정으로 열림</div>';
+    let h = `<div>${crossSvg('var(--accent)')}열린 쉼터</div>
+      <div>${crossSvg('var(--soon)')}1시간 안에 닫힘</div>`;
+    if (st.plan.eve || st.plan.wkd) h += `<div><svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-1px;margin-right:6px"><path d="M4.4 1h3.2v3.4H11v3.2H7.6V11H4.4V7.6H1V4.4h3.4z" fill="var(--accent)" stroke="var(--plan)" stroke-width="1.4" stroke-linejoin="round"/></svg>운영시간 가정으로 열림</div>`;
     if (st.gap) h += `<div><i style="background:${LAYERS[st.base] ? (isDark() ? 'rgba(0,0,0,.45)' : 'rgba(21,38,43,.30)') : 'var(--gap-fill)'};border-radius:2px"></i>${LAYERS[st.base] ? '어두운 칸' : '공백 칸'}(500m 안에 열린 쉼터 없음)</div>`;
-    if (st.hot && HOT.length) h += `<div><b style="display:inline-block;width:10px;margin-right:6px;color:${CCOL[3]}">◆</b>주요 장소 혼잡도(${esc(CITY.t)})</div>`;
-    if (st.health) h += '<div><b style="display:inline-block;width:10px;margin-right:6px;text-align:center">+</b>보건소·병원 쉼터</div>';
+    if (st.hot && HOT.length) h += `<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap">${[0, 1, 2, 3].map((lv) => battSvg(lv, 18)).join('')}<span style="margin-left:3px">혼잡도 여유→붐빔(${esc(CITY.t)})</span></div>`;
+    if (st.health) h += '<div><i style="background:transparent;border:1.6px solid var(--ink);width:9px;height:9px"></i>보건소·병원 쉼터(고리)</div>';
     if (st.tab === 'policy' && rec.show && rec.list.length) h += '<div><i style="background:var(--plan)"></i>새 쉼터 추천 위치(번호 = 우선순위)</div>';
     if (st.route && routeStat) h += `<div><span class="ln" style="background:var(--route-ok)"></span>안심귀갓길: 500m 안 열린 쉼터 있음 ${routeStat.pct.toFixed(0)}%</div><div><span class="ln" style="background:var(--route-no)"></span>안심귀갓길: 없음 (전체 ${routeStat.km.toFixed(0)}km)</div>`;
     const L = LAYERS[st.base];
