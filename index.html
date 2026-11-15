@@ -615,6 +615,8 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     home.k = Math.min(kLat, kLon) * 0.95;
     cam.lat = home.lat; cam.lon = home.lon; cam.k = home.k;
   }
+  // 시민용은 내 주변(약 2km), 정책용은 서울 전체로 시작한다
+  function focusMe() { if (!home.k) fitHome(); cam.lat = st.me.lat; cam.lon = st.me.lon; cam.k = home.k * 7; }
   const COS = Math.cos(37.55 * Math.PI / 180), RAD = Math.PI / 180;
   // 웹 메르카토르(바탕지도 타일과 같은 투영). 서울 위도에서 cam.k = 위도 1도당 픽셀
   const mY = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * RAD / 2)) / RAD;
@@ -667,7 +669,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     }
     // 공백 칸
     if (st.gap && st.tab === 'policy') {
-      ctx.fillStyle = L ? (isDark() ? 'rgba(0,0,0,.45)' : 'rgba(21,38,43,.30)') : css('--gap-fill');
+      ctx.fillStyle = L ? (isDark() ? 'rgba(0,0,0,.45)' : 'rgba(21,38,43,.30)') : tiled ? 'rgba(255,104,64,.55)' : css('--gap-fill');
       const hw = D.dlon / 2, hh = D.dlat / 2;
       for (const [la, lo] of cov.gapCells) {
         const [x0, y0] = px(la + hh, lo - hw), [x1, y1] = px(la - hh, lo + hw);
@@ -703,14 +705,44 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
         ctx.fillText(g.name, x, y);
       }
     }
-    // 500m 원
     const [mx, my] = px(st.me.lat, st.me.lon);
     const rpx = R / MLAT * cam.k;
+    const userView = st.tab !== 'policy';
+    // 시민용: 열린 쉼터마다 걸어서 7분(500m) 권역을 하나로 합쳐 옅게 칠한다
+    if (userView) {
+      ctx.beginPath();
+      for (const v of view) {
+        if (v.left < 0) continue;
+        const [x, y] = px(v.s.lat, v.s.lon);
+        if (x < -rpx || y < -rpx || x > W + rpx || y > H + rpx) continue;
+        ctx.moveTo(x + rpx, y); ctx.arc(x, y, rpx, 0, 6.283);
+      }
+      ctx.fillStyle = css('--accent'); ctx.globalAlpha = isDark() ? 0.14 : 0.1; ctx.fill(); ctx.globalAlpha = 1;
+    }
+    // 시민용: 가장 가까운 열린 쉼터까지 점선과 도보 시간
+    let nearest = null;
+    if (userView) {
+      let bd = Infinity;
+      for (const v of view) { if (v.left < 0) continue; const d = dist(v.s); if (d < bd) { bd = d; nearest = { v, d }; } }
+      if (nearest) {
+        const [nx, ny] = px(nearest.v.s.lat, nearest.v.s.lon);
+        ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(nx, ny);
+        ctx.strokeStyle = css('--ink'); ctx.lineWidth = 2; ctx.setLineDash([2, 4]); ctx.lineCap = 'round'; ctx.stroke(); ctx.setLineDash([]); ctx.lineCap = 'butt';
+        if (Math.hypot(nx - mx, ny - my) > 40 && cam.k >= home.k * 2) {
+          const t = `도보 ${Math.max(1, Math.ceil(nearest.d / 70))}분`;
+          ctx.font = `700 12px ${css('--f-body')}`; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+          const lx = (mx + nx) / 2, ly = (my + ny) / 2 - 6;
+          ctx.strokeStyle = css('--panel'); ctx.lineWidth = 4; ctx.strokeText(t, lx, ly); ctx.fillStyle = css('--ink'); ctx.fillText(t, lx, ly);
+        }
+      }
+    }
+    // 500m 원
     ctx.beginPath(); ctx.arc(mx, my, rpx, 0, Math.PI * 2);
     ctx.strokeStyle = css('--me'); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
     // 쉼터 점
     const rad = Math.max(2, Math.min(6, cam.k / home.k * 2.2));
-    const cOpen = css('--sh-open'), cSoon = css('--sh-soon'), cClosed = css('--closed'), cPlan = css('--plan');
+    const polV = st.tab === 'policy' && (tiled || !isDark());
+    const cOpen = polV ? '#ffffff' : css('--sh-open'), cSoon = css('--sh-soon'), cClosed = css('--closed'), cPlan = css('--plan');
     const arm = (rad * 1.2 + 1) * (st.tab === 'policy' ? 0.75 : 1), thick = Math.max(1.2, arm * 0.34);
     if (st.showClosed) {
       ctx.fillStyle = cClosed; ctx.globalAlpha = 0.55;
@@ -724,7 +756,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       if (x < -10 || y < -10 || x > W + 10 || y > H + 10) continue;
       crossPath(x, y, arm, thick);
       ctx.lineJoin = 'round';
-      if (L || tiled || rad > 3) { ctx.strokeStyle = tiled && !isDark() ? '#fff' : css('--panel'); ctx.lineWidth = tiled ? 1.6 : 1; ctx.stroke(); }
+      if (L || tiled || rad > 3 || polV) { ctx.strokeStyle = polV ? 'rgba(20,24,26,.7)' : tiled && !isDark() ? '#fff' : css('--panel'); ctx.lineWidth = tiled ? 1.6 : 1; ctx.stroke(); }
       ctx.fillStyle = v.left < 60 ? cSoon : cOpen; ctx.fill();
       if (v.plan) { ctx.strokeStyle = cPlan; ctx.lineWidth = 1.8; ctx.stroke(); }
       ctx.lineJoin = 'miter';
@@ -740,6 +772,12 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
         if (x < -50 || y < -10 || x > W + 10 || y > H + 10) continue;
         ctx.strokeText(v.s.name, x + arm + 4, y + 4); ctx.fillText(v.s.name, x + arm + 4, y + 4); nlab++;
       }
+    }
+    if (nearest && cam.k >= home.k * 2 && cam.k <= home.k * 22) {
+      const [x, y] = px(nearest.v.s.lat, nearest.v.s.lon);
+      ctx.font = `700 12px ${css('--f-body')}`; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = css('--panel'); ctx.lineWidth = 3.5; ctx.strokeText(nearest.v.s.name, x + arm + 5, y + 4);
+      ctx.fillStyle = css('--ink'); ctx.fillText(nearest.v.s.name, x + arm + 5, y + 4);
     }
     drawHot();
     // 새 쉼터 추천 위치 (정책 화면에서만)
@@ -833,10 +871,10 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     const s = Math.max(5, Math.min(9, 3 + Math.sqrt(h.b) / 55)) * Math.min(1.4, Math.max(0.85, z / 2));
     return { w: Math.round(s * 2.6), h: Math.max(5, Math.round(s * 1.1)) };
   };
-  const crossSvg = (c) => `<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-1px;margin-right:6px"><path d="M5 1h2v4h4v2H7v4H5V7H1V5h4z" fill="${c}"/></svg>`;
+  const crossSvg = (c, sk) => `<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-1px;margin-right:6px"><path d="M5 1h2v4h4v2H7v4H5V7H1V5h4z" fill="${c}"${sk ? ` stroke="${sk}" stroke-width=".8"` : ''}/></svg>`;
   const battSvg = (lv, w = 22) => `<svg width="${w}" height="10" viewBox="0 0 22 10" style="vertical-align:-1px"><rect x=".6" y=".6" width="20.8" height="8.8" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2.4" y="2.4" width="${(17.2 * (lv + 1) / 4).toFixed(2)}" height="5.2" rx="1.2" fill="currentColor"/></svg>`;
   function drawHot() {
-    if (!st.hot || !HOT.length || st.tab === 'policy') return;
+    if (!st.hot || !HOT.length || st.tab === 'policy' || cam.k < home.k * 2.5) return;
     const z = cam.k / home.k;
     for (const h of HOT) {
       const [x, y] = px(h.lat, h.lon);
@@ -859,7 +897,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     }
   }
   function hotAt(x, y) {
-    if (!st.hot || st.tab === 'policy') return null;
+    if (!st.hot || st.tab === 'policy' || cam.k < home.k * 2.5) return null;
     let best = null, bd = Infinity;
     for (const h of HOT) {
       const [hx, hy] = px(h.lat, h.lon), sz = hotSize(h);
@@ -911,11 +949,11 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   }
 
   function renderLegend() {
-    let h = `<div>${crossSvg('var(--sh-open)')}열린 쉼터</div>
+    let h = (st.tab !== 'policy' ? `<div><i style="background:color-mix(in srgb,var(--accent) 30%,transparent);border-radius:3px"></i>걸어서 7분(500m) 안에 열린 쉼터가 있는 곳</div>` : '') + `<div>${st.tab === 'policy' && !isDark() ? crossSvg('#fff', '#333') : crossSvg('var(--sh-open)')}열린 쉼터</div>
       <div>${crossSvg('var(--sh-soon)')}1시간 안에 닫힘</div>`;
     if (st.plan.eve || st.plan.wkd) h += `<div><svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-1px;margin-right:6px"><path d="M5 1h2v4h4v2H7v4H5V7H1V5h4z" fill="var(--sh-open)" stroke="var(--plan)" stroke-width="1.2" stroke-linejoin="round"/></svg>운영시간 가정으로 열림</div>`;
-    if (st.gap && st.tab === 'policy') h += `<div><i style="background:${LAYERS[st.base] ? (isDark() ? 'rgba(0,0,0,.45)' : 'rgba(21,38,43,.30)') : 'var(--gap-fill)'};border-radius:2px"></i>${LAYERS[st.base] ? '어두운 칸' : '공백 칸'}(500m 안에 열린 쉼터 없음)</div>`;
-    if (st.hot && HOT.length && st.tab !== 'policy') h += `<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;color:var(--hot)">${[0, 3].map((lv) => battSvg(lv, 18)).join('<span style="font-size:10px">→</span>')}<span style="margin-left:3px;color:var(--ink)">주요 장소 혼잡도: 찰수록 붐빔(${esc(CITY.t)})</span></div>`;
+    if (st.gap && st.tab === 'policy') h += `<div><i style="background:${LAYERS[st.base] ? (isDark() ? 'rgba(0,0,0,.45)' : 'rgba(21,38,43,.30)') : st.basemap !== 'off' ? 'rgba(255,104,64,.75)' : 'var(--gap-fill)'};border-radius:2px"></i>${LAYERS[st.base] ? '어두운 칸' : '공백 칸'}(500m 안에 열린 쉼터 없음)</div>`;
+    if (st.hot && HOT.length && st.tab !== 'policy' && cam.k >= home.k * 2.5) h += `<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;color:var(--hot)">${[0, 3].map((lv) => battSvg(lv, 18)).join('<span style="font-size:10px">→</span>')}<span style="margin-left:3px;color:var(--ink)">주요 장소 혼잡도: 찰수록 붐빔(${esc(CITY.t)})</span></div>`;
     if (st.health) h += '<div><i style="background:transparent;border:1.6px solid var(--ink);width:9px;height:9px"></i>보건소·병원 쉼터(고리)</div>';
     if (st.tab === 'policy' && rec.show && rec.list.length) h += '<div><i style="background:var(--plan)"></i>새 쉼터 추천 위치(번호 = 우선순위)</div>';
     if (st.route && routeStat) h += `<div><span class="ln" style="background:var(--route-ok)"></span>안심귀갓길: 500m 안 열린 쉼터 있음 ${routeStat.pct.toFixed(0)}%</div><div><span class="ln" style="background:var(--route-no)"></span>안심귀갓길: 없음 (전체 ${routeStat.km.toFixed(0)}km)</div>`;
@@ -1110,6 +1148,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     $('sub').textContent = u ? '지금 걸어서 갈 수 있는 열린 무더위쉼터를 찾아 드립니다.' : '언제, 어디서, 누구에게 쉼터가 부족한지 진단하고 보완책의 효과를 봅니다.';
     $('l-who-t').textContent = u ? '나는 누구인가요' : '대상 집단';
     $('l-when-t').textContent = u ? '언제 가나요' : '기준 요일·시각';
+    if (u) focusMe(); else fitHome();
     renderBrief(); renderLegend(); redraw();
     $('tab-user').setAttribute('aria-selected', u); $('tab-policy').setAttribute('aria-selected', !u);
     $('pane-user').hidden = !u; $('pane-policy').hidden = u;
@@ -1123,11 +1162,11 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     cam.k = Math.max(home.k * 0.6, Math.min(home.k * 160, cam.k * f));
     const [la2, lo2] = geo(x, y);
     cam.lat = iY(mY(cam.lat) + mY(la) - mY(la2)); cam.lon += lo - lo2;
-    redraw();
+    redraw(); renderLegend();
   }
   $('zin').addEventListener('click', () => zoomAt(1.6, W / 2, H / 2));
   $('zout').addEventListener('click', () => zoomAt(1 / 1.6, W / 2, H / 2));
-  $('zreset').addEventListener('click', () => { fitHome(); draw(); });
+  $('zreset').addEventListener('click', () => { fitHome(); renderLegend(); draw(); });
   cv.addEventListener('wheel', (e) => { e.preventDefault(); const r = cv.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
 
   const ptrs = new Map();
@@ -1521,6 +1560,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChange); } catch (e) {}
   new MutationObserver(themeChange).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   setBasemap(st.basemap);
-  compute(); computeRec(); renderPanel(); renderRec(); resize();
+  st.tab = 'user';
+  compute(); computeRec(); renderPanel(); renderRec(); resize(); focusMe(); renderLegend(); draw();
 })();
 </script>
