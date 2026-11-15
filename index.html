@@ -639,6 +639,11 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     for (const ring of rings) ring.forEach(([lo, la], j) => { const [x, y] = px(la, lo); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
   }
 
+  // 서울 바깥 = 화면 사각형에서 25개 구를 뺀 영역 (구끼리는 겹치지 않으므로 evenodd로 충분)
+  function outsidePath() {
+    ctx.beginPath(); ctx.rect(-10, -10, W + 20, H + 20);
+    for (const g of D.gus) for (const ring of g.rings) ring.forEach(([lo, la], j) => { const [x, y] = px(la, lo); j ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  }
   function draw() {
     if (!W) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -650,6 +655,10 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     if (tiled && st.basemap === 'sat') { ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, 0, W, H); }
     if (tiled && st.tab !== 'policy' && !isDark()) { ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(0, 0, W, H); }   // 이용자 화면은 하얗게 한 겹 더
     if (!tiled && st.tab === 'policy') { ctx.fillStyle = isDark() ? 'rgba(0,0,0,.35)' : 'rgba(20,30,34,.22)'; ctx.fillRect(0, 0, W, H); }
+    // 서울 바깥은 한 겹 덮어 흐리게
+    outsidePath();
+    ctx.fillStyle = st.tab === 'policy' || isDark() ? 'rgba(0,0,0,.38)' : 'rgba(255,255,255,.62)';
+    ctx.fill('evenodd');
     // 행정동 바탕색
     const L = LAYERS[st.base];
     if (L && tiled) ctx.globalAlpha = 0.72;
@@ -676,9 +685,16 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
         ctx.fillRect(x0, y0, x1 - x0 + 0.3, y1 - y0 + 0.3);
       }
     }
-    // 구 경계
-    ctx.strokeStyle = css('--boundary'); ctx.lineWidth = 0.8;
+    // 구 경계: 은은하게
+    ctx.strokeStyle = css('--boundary'); ctx.lineWidth = 0.7; ctx.globalAlpha = 0.55; ctx.setLineDash([4, 3]);
     for (const g of D.gus) { path(g.rings); ctx.stroke(); }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // 서울 바깥 경계선: 바깥쪽에만 그려지도록 잘라서 굵게
+    ctx.save(); outsidePath(); ctx.clip('evenodd');
+    ctx.strokeStyle = st.tab === 'policy' || isDark() ? 'rgba(255,255,255,.75)' : css('--ink'); ctx.globalAlpha = st.tab === 'policy' || isDark() ? 1 : 0.55;
+    ctx.lineWidth = 3; ctx.lineJoin = 'round';
+    for (const g of D.gus) { path(g.rings); ctx.stroke(); }
+    ctx.restore();
     // 안심귀갓길
     if (st.route && routeHit) {
       ctx.lineWidth = Math.max(1.6, Math.min(4, cam.k / home.k * 1.4)); ctx.lineCap = 'round';
