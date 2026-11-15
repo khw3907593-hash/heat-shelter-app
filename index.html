@@ -193,8 +193,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
     <div class="stats" aria-live="polite">
       <div class="stat"><b id="s-open">0</b><span>열린 쉼터</span></div>
-      <div class="stat"><b id="s-cov">0%</b><span>500m 안에 열린 쉼터가 있는 면적</span><div class="delta" id="s-delta"></div></div>
-      <div class="stat"><b id="s-gap">0</b><span>500m 안에 열린 쉼터가 없는 사람</span><div class="sm" id="s-gap2"></div></div>
+      <div class="stat"><b id="s-cov">0%</b><span>65세 이상 중 500m 안에 열린 쉼터가 없는 비율</span></div>
+      <div class="stat"><b id="s-gap">0</b><span>500m 안에 열린 쉼터가 없는 사람</span><div class="sm" id="s-gap2"></div><div class="delta" id="s-delta"></div></div>
     </div>
 
     <div class="tabs" role="tablist">
@@ -229,7 +229,6 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <div class="lab">지도 레이어</div>
         <div class="toggles">
           <label><input type="checkbox" id="lay-gap" checked>공백 칸: 500m 안에 열린 쉼터가 없는 250m 칸</label>
-          <label><input type="checkbox" id="lay-route">안심귀갓길: 500m 안에 열린 쉼터가 있는 구간과 없는 구간</label>
         </div>
         <div class="lab" style="margin-top:6px">행정동 바탕색</div>
         <div class="toggles" id="base-radios">
@@ -269,7 +268,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       </section>
     </div>
 
-    <p class="note">자료: 서울 열린데이터광장 OA-21065 서울시 무더위쉼터(2026.10.16 갱신), OA-14991 생활인구(2026.7), 수도권 생활이동(2026.7, 목적 3 귀가), OA-15969 S-DoT 환경정보(2026.6.29~8.16), OA-21695 안심귀갓길, 공공데이터포털 15138456 행정안전부 무더위쉼터(샘플), 행정동 경계 vuski/admdongkor. ‘누구나’는 시설구분이 특정계층이용시설이 아닌 곳입니다. 공백 인구는 같은 요일·시각의 2026년 7월 평균 생활인구를 행정동 안 공백 칸 비율로 나눈 추정치입니다. 운영시간은 공개 자료 기준이니 방문 전에 전화로 확인하세요. 거리는 직선거리입니다.</p>
+    <p class="note">자료: 서울 열린데이터광장 OA-21065 서울시 무더위쉼터(2026.10.16 갱신), OA-14991 생활인구(2026.7), 수도권 생활이동(2026.7, 목적 3 귀가), OA-15969 S-DoT 환경정보(2026.6.29~8.16), 공공데이터포털 15138456 행정안전부 무더위쉼터(샘플), 행정동 경계 vuski/admdongkor. ‘누구나’는 시설구분이 특정계층이용시설이 아닌 곳입니다. 공백 인구는 같은 요일·시각의 2026년 7월 평균 생활인구를 행정동 안 공백 칸 비율로 나눈 추정치입니다. 운영시간은 공개 자료 기준이니 방문 전에 전화로 확인하세요. 거리는 직선거리입니다.</p>
   </aside>
 
   <div class="mapwrap">
@@ -463,7 +462,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     view = res;
     const bucket = bucketOf(openPlan);
     cov = coverage(bucket, true);
-    cov.base = anyPlan ? coverage(bucketOf(openBase), false).pct : cov.pct;
+    const baseCov = anyPlan ? coverage(bucketOf(openBase), false) : null;
     cov.nOpen = openPlan.length;
     // 공백 인구: 같은 요일유형·시각의 행정동 생활인구 x 동 안 공백 칸 비율
     const dt = dtype(), h = Math.floor(st.t / 60);
@@ -477,6 +476,11 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       return { k, share, people: share * p };
     });
     cov.gapPop = gp; cov.gapPct = gp / tot * 100;
+    if (baseCov) {
+      let bg = 0;
+      DONGS.forEach((d, k) => { bg += (baseCov.dn[k] ? 1 - baseCov.dc[k] / baseCov.dn[k] : 0) * d.p[dt][h]; });
+      cov.baseGap = bg;
+    } else cov.baseGap = gp;
     cov.gap2059 = g2059 / t2059 * 100; cov.gap65 = g65 / t65 * 100;
     cov.gu = gu;
     // 안심귀갓길
@@ -893,9 +897,9 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     $('time').value = st.t;
     document.querySelectorAll('#days input').forEach((el) => { el.checked = +el.value === st.day; });
     $('s-open').textContent = cov.nOpen.toLocaleString() + '곳';
-    $('s-cov').textContent = cov.pct.toFixed(1) + '%';
+    $('s-cov').textContent = cov.gap65.toFixed(1) + '%';
     const anyPlan = st.plan.eve || st.plan.wkd;
-    $('s-delta').textContent = anyPlan ? `가정 전 ${cov.base.toFixed(1)}% → +${(cov.pct - cov.base).toFixed(1)}%p` : '';
+    $('s-delta').textContent = anyPlan ? `가정 전 ${fmtPeople(cov.baseGap)}명 → −${fmtPeople(Math.max(0, cov.baseGap - cov.gapPop))}명` : '';
     $('s-gap').textContent = fmtPeople(cov.gapPop) + '명';
     $('s-gap2').textContent = `생활인구의 ${cov.gapPct.toFixed(1)}%`;
     // 가까운 쉼터
@@ -936,12 +940,10 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     const nt = nowTemp(k);
     $('my-dong').innerHTML = `<dl class="kv">
       ${NOW ? `<dt>지금 기온</dt><dd>${nt ? `<b>${nt.t.toFixed(1)}°C</b>${nt.h != null ? ` · 습도 ${nt.h}%` : ''} <span class="note">(S-DoT ${esc(NOW.t)} 측정, ${esc(nt.src)})</span>` : '<span class="note">센서 없음</span>'}</dd>` : ''}
-      ${AIR ? `<dt>지금 대기질</dt><dd>${airLine(d.g)}</dd>` : ''}
       <dt>저녁 20~22시 기온</dt><dd>${temp}</dd>
       <dt>열대야(밤 최저 25°C 이상)</dt><dd>${tn}</dd>
       <dt>선택한 시각의 공백 칸</dt><dd>동 면적의 ${(gx.share * 100).toFixed(0)}%</dd>
       <dt>그 시각 공백 인구</dt><dd>약 ${fmtPeople(gx.people)}명 <span class="note">/ ${dayName} ${h}시 생활인구 ${fmtPeople(d.p[dt][h])}명</span></dd>
-      <dt>평일 저녁 귀가 도착</dt><dd>하루 약 ${fmtPeople(d.home || 0)}명 <span class="note">(18~23시)</span></dd>
     </dl>`;
   }
 
@@ -1038,7 +1040,6 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
   $('p-ext').addEventListener('change', (e) => { st.ext = e.target.checked; update(); });
   $('show-closed').addEventListener('change', (e) => { st.showClosed = e.target.checked; draw(); });
   $('lay-gap').addEventListener('change', (e) => { st.gap = e.target.checked; renderLegend(); draw(); });
-  $('lay-route').addEventListener('change', (e) => { st.route = e.target.checked; update(); });
   // 바탕색을 켜면 공백 칸은 꺼서 겹침을 줄인다(다시 켤 수 있음)
   $('base-radios').addEventListener('change', (e) => {
     st.base = e.target.value; st.gap = st.base === 'none'; $('lay-gap').checked = st.gap;
@@ -1343,7 +1344,6 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
         ${(() => { const nt = nowTemp(dongAt(p.lat, p.lon)); return nt ? `<div class="note">이 동네 지금 기온 <b style="color:var(--ink)">${nt.t.toFixed(1)}°C</b>${nt.h != null ? ` · 습도 ${nt.h}%` : ''} (S-DoT ${esc(NOW.t)})</div>` : ''; })()}
         <div class="addr" id="pl-addr">${s ? esc(s.addr) : '<span class="load">주소 찾는 중…</span>'}</div>
         ${p.hot ? hotBlock(p.hot) : ''}
-        ${AIR ? `<div class="note">대기질: ${(() => { const k = dongAt(p.lat, p.lon); return k < 0 ? '—' : airLine(DONGS[k].g); })()}</div>` : ''}
         ${s ? `<div>${statusPill(v)} <span class="note">· 내 위치에서 ${fmtM(dist(s))}</span></div>`
           : no ? `<button type="button" class="near1" data-i="${no.v.s.i}">가장 가까운 열린 쉼터: <b>${esc(no.v.s.name)}</b> · ${fmtM(no.d)}${no.d > R ? ' <span style="color:var(--gap)">(500m 밖)</span>' : ''}</button>`
           : '<div class="note" style="color:var(--gap)">이 시각에 열린 쉼터가 없습니다.</div>'}
