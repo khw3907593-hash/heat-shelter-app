@@ -603,6 +603,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     // 바탕지도(도로·건물 / 항공사진). 인터넷이 없으면 위의 기본 바탕만 보인다
     const tiled = drawTiles();
     if (tiled && st.basemap === 'sat') { ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(0, 0, W, H); }
+    if (!tiled && st.tab === 'policy') { ctx.fillStyle = isDark() ? 'rgba(0,0,0,.25)' : 'rgba(20,30,34,.10)'; ctx.fillRect(0, 0, W, H); }
     // 행정동 바탕색
     const L = LAYERS[st.base];
     if (L && tiled) ctx.globalAlpha = 0.72;
@@ -1170,7 +1171,11 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
     const y0 = Math.max(0, Math.floor((cy - H / 2 / f) / 256)), y1 = Math.min(n - 1, Math.floor((cy + H / 2 / f) / 256));
     const size = 256 * f;
     ctx.save();
-    if (B.dark && isDark()) ctx.filter = 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85)';
+    // 바탕지도는 흑백. 이용자 화면은 밝게, 정책 화면은 한 톤 어둡게 깔아 두 화면을 구분한다
+    const pol = st.tab === 'policy', dk = isDark();
+    const tone = dk ? (pol ? 'brightness(0.62) contrast(0.9)' : 'brightness(0.85) contrast(0.85)')
+                    : (pol ? 'brightness(0.86) contrast(0.92)' : 'brightness(1.06) contrast(0.82)');
+    ctx.filter = (B.dark && dk ? 'invert(1) hue-rotate(180deg) ' : '') + 'grayscale(1) ' + tone;
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
       const sx = W / 2 + (tx * 256 - cx) * f, sy = H / 2 + (ty * 256 - cy) * f;
       const t = tile(B.url(z, tx, ty));
