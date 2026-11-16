@@ -265,12 +265,12 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         </div>
         <div class="card" id="rec-sum" style="margin-top:8px"></div>
         <div class="list" id="rec-list" style="margin-top:6px"></div>
-        <p class="note">250m 칸마다 그 자리에 쉼터를 하나 연다고 가정하고, 아직 500m 안에 열린 쉼터가 없는 사람을 가장 많이 덮는 곳부터 하나씩 고릅니다. 앞서 고른 곳이 이미 덮은 사람은 다시 세지 않습니다. 동 안의 인구는 고르게 퍼져 있다고 가정했고, 위의 시각·요일·대상·운영시간 가정을 그대로 따릅니다. 위치를 누르면 그 자리의 건물과 주변 시설이 떠서, 실제로 열 만한 건물(주민센터, 도서관, 경로당 등)을 찾아볼 수 있습니다.</p>
+        <p class="note">후보 지점마다 그 자리에 쉼터를 하나 연다고 가정하고, 아직 500m 안에 열린 쉼터가 없는 사람을 가장 많이 덮는 곳부터 하나씩 고릅니다. 앞서 고른 곳이 이미 덮은 사람은 다시 세지 않습니다. 동 안의 인구는 고르게 퍼져 있다고 가정했고, 위의 시각·요일·대상·운영시간 가정을 그대로 따릅니다. 위치를 누르면 그 자리의 건물과 주변 시설이 떠서, 실제로 열 만한 건물(주민센터, 도서관, 경로당 등)을 찾아볼 수 있습니다.</p>
       </section>
       <section>
         <div class="lab">지도 설정</div>
         <div class="toggles">
-          <label><input type="checkbox" id="lay-gap" checked>공백 지역: 열린 쉼터 500m 원 밖 (250m 칸을 원으로 깎은 모양)</label>
+          <label><input type="checkbox" id="lay-gap" checked>공백 지역: 열린 쉼터 500m 보행 버퍼 밖</label>
         </div>
         <div class="lab" style="margin-top:6px">행정동 바탕색</div>
         <div class="toggles" id="base-radios">
@@ -282,7 +282,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       </section>
     </div>
 
-    <p class="note">자료: 서울 열린데이터광장 OA-21065 서울시 무더위쉼터(2026.10.16 갱신), OA-14991 생활인구(2026.7), 수도권 생활이동(2026.7, 목적 3 귀가), OA-15969 S-DoT 환경정보(2026.6.29~8.16), 실시간 S-DoT·서울 실시간 도시데이터(매시 갱신), 공공데이터포털 15138456 행정안전부 무더위쉼터(샘플), 행정동 경계 vuski/admdongkor. ‘누구나’는 시설구분이 특정계층이용시설이 아닌 곳입니다. 공백 인구는 같은 요일·시각의 2026년 7월 평균 생활인구가 250m 칸 안에 고르게 퍼져 있다고 보고, 칸 넓이 중 열린 쉼터 500m 원 밖에 남는 비율만큼 센 추정치입니다. 운영시간은 공개 자료 기준이니 방문 전에 전화로 확인하세요. 거리는 직선거리입니다.</p>
+    <p class="note">자료: 서울 열린데이터광장 OA-21065 서울시 무더위쉼터(2026.10.16 갱신), OA-14991 생활인구(2026.7), 수도권 생활이동(2026.7, 목적 3 귀가), OA-15969 S-DoT 환경정보(2026.6.29~8.16), 실시간 S-DoT·서울 실시간 도시데이터(매시 갱신), 공공데이터포털 15138456 행정안전부 무더위쉼터(샘플), 행정동 경계 vuski/admdongkor. ‘누구나’는 시설구분이 특정계층이용시설이 아닌 곳입니다. 공백 인구는 같은 요일·시각의 2026년 7월 평균 생활인구가 행정동 안에 고르게 퍼져 있다고 보고, 열린 쉼터 500m 보행 버퍼 밖에 남는 넓이만큼 센 추정치입니다. 운영시간은 공개 자료 기준이니 방문 전에 전화로 확인하세요. 거리는 직선거리입니다.</p>
   </aside>
 
   <div class="mapwrap">
@@ -705,7 +705,7 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       ctx.strokeStyle = css('--line'); ctx.lineWidth = 0.6;
       for (const d of DONGS) { path(d.r); ctx.stroke(); }
     }
-    // 공백 칸
+    // 공백 지역: 서울 − 열린 쉼터 500m 버퍼
     if (st.gap && st.tab === 'policy') {
       const col = L ? (isDark() ? 'rgba(0,0,0,.45)' : 'rgba(21,38,43,.30)') : tiled ? 'rgba(255,104,64,.55)' : css('--gap-fill');
       if (!gapLayer) gapLayer = document.createElement('canvas');
@@ -713,12 +713,10 @@ window.SHELTER_DATA={"cat1":["공공시설","생활밀착민간시설","특정�
       const g = gapLayer.getContext('2d');
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.fillStyle = '#000';
-      const hw = D.dlon / 2, hh = D.dlat / 2;
-      for (const [la, lo] of cov.gapCells) {
-        const [x0, y0] = px(la + hh, lo - hw), [x1, y1] = px(la - hh, lo + hw);
-        g.fillRect(x0, y0, x1 - x0 + 0.3, y1 - y0 + 0.3);
-      }
-      // 열린 쉼터의 500m 원 안은 지운다 (칸 일부만 공백인 경우 그 부분만 남음)
+      // 서울 전체를 칠한 뒤 열린 쉼터의 500m 보행 버퍼 안을 지운다 (격자 없음)
+      g.beginPath();
+      for (const gu of D.gus) for (const ring of gu.rings) ring.forEach(([lo, la], j) => { const [x, y] = px(la, lo); j ? g.lineTo(x, y) : g.moveTo(x, y); });
+      g.fill();
       const rr = R / MLAT * cam.k;
       g.globalCompositeOperation = 'destination-out'; g.beginPath();
       for (const v of view) { if (v.left < 0) continue; const [x, y] = px(v.s.lat, v.s.lon); if (x < -rr || y < -rr || x > W + rr || y > H + rr) continue; g.moveTo(x + rr, y); g.arc(x, y, rr, 0, 6.283); }
